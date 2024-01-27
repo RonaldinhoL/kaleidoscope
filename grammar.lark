@@ -1,0 +1,162 @@
+// copy from python lol
+
+start: (_NEWLINE | stmt)*
+
+// #######  语句
+?stmt: simple_stmt | compound_stmt
+
+// ####### 单行语句
+?simple_stmt: small_stmt (";" small_stmt)* [";"] _NEWLINE
+?small_stmt: (expr_stmt | assign_stmt | pass_stmt | flow_stmt)
+
+// 表达式语句
+expr_stmt: test
+
+// 赋值语句
+assign_stmt: augassign | assign
+// 直接赋值
+assign: test ("=" (test))+
+// 运算赋值
+augassign: test augassign_op (test)
+!augassign_op: "+=" | "-=" | "*=" | "@=" | "/=" | "%=" | "&=" | "|=" | "^=" | "<<=" | ">>=" | "**=" | "//="
+
+
+// 其他短语句
+pass_stmt: "pass"
+?flow_stmt: break_stmt | continue_stmt | return_stmt
+break_stmt: "break"
+continue_stmt: "continue"
+return_stmt: "return" [test]
+extern: "extern" name
+
+
+// ####### 复合语句
+?compound_stmt: if_stmt | while_stmt | for_stmt | funcdef
+
+
+// 函数
+funcdef: "def" name "(" [parameters] ")" block
+parameters: paramvalue ("," paramvalue)*
+?paramvalue: name ("=" test)?
+
+// 逻辑语句
+if_stmt: "if" test block elifs ["else"  block]
+elifs: elif_*
+elif_: "elif" test block
+while_stmt: "while" test block
+for_stmt: "for" name "in" test
+
+
+// 语句块
+block : "{" _NEWLINE? stmt* _NEWLINE? "}" _NEWLINE?
+// suite: simple_stmt | _NEWLINE "_INDENT" stmt+ _DEDENT
+
+
+
+// 逻辑表达式及其优先级
+?test: or_test ("if" or_test "else" test)?
+// 或
+?or_test: and_test ("||" and_test)*
+// 与
+?and_test: not_test_ ("&&" not_test_)*
+// 非
+?not_test_: "!" not_test_ -> not_test
+         | comparison
+?comparison: expr (comp_op expr)*
+
+
+// 表达式 优先级越高的越放到下面
+?expr: or_expr
+// 或
+?or_expr: xor_expr ("|" xor_expr)*
+// 异或
+?xor_expr: and_expr ("^" and_expr)*
+// 与
+?and_expr: shift_expr ("&" shift_expr)*
+
+// 移位
+?shift_expr: arith_expr (_shift_op arith_expr)*
+
+
+// 算术项
+?arith_expr: term (_add_op term)*
+
+// 乘除项
+?term: factor (_mul_op factor)*
+
+// 正负和取反
+?factor: _unary_op factor | power
+
+!_shift_op: "<<"|">>"
+!_add_op: "+"|"-"
+!_mul_op: "*"|"@"|"/"|"%"|"//"
+!_unary_op: "+"|"-"|"~"
+
+!comp_op: "<"|">"|"=="|">="|"<="|"<>"|"!="|"in"|"not" "in"|"is"|"is" "not"
+
+// await
+?power: atom_expr ("**" factor)?
+
+// 原子表达式
+?atom_expr: atom_expr "(" [arguments] ")"      -> funccall
+          | atom
+          // getitem
+          // getattr
+
+// 原子
+// 其他基本类型，元组，列表，字典，推导式等
+?atom: name -> var
+     | number
+     | string_concat
+     | "(" test ")"
+     | "..." -> ellipsis
+     | "None"    -> const_none
+     | "True"    -> const_true
+     | "False"   -> const_false
+
+?string_concat: string+
+
+// 实参
+arguments: argvalue ("," argvalue)*  ("," [ starargs | kwargs])?
+         | starargs
+         | kwargs
+starargs: stararg ("," stararg)* ("," argvalue)* ["," kwargs]
+stararg: "*" test
+kwargs: "**" test ("," argvalue)*
+
+?argvalue: test
+
+// ##################### 终结符
+
+number: DEC_NUMBER | HEX_NUMBER | BIN_NUMBER | OCT_NUMBER | FLOAT_NUMBER
+string: STRING
+
+// Other terminals
+
+_NEWLINE: ( /\r?\n[\t ]*/ | COMMENT )+
+
+%ignore /[\t \f]+/  // WS
+%ignore /\\[\t \f]*\r?\n/   // LINE_CONT
+%ignore COMMENT
+
+// Python terminals
+
+!name: NAME
+NAME: /[^\W\d]\w*/
+COMMENT: /#[^\n]*/
+
+
+// 字符串
+STRING: /([ubf]?r?|r[ubf])("(?!"").*?(?<!\\)(\\\\)*?"|'(?!'').*?(?<!\\)(\\\\)*?')/i
+
+// 数字
+_SPECIAL_DEC: "0".."9"        ("_"?  "0".."9"                       )*
+DEC_NUMBER:   "1".."9"        ("_"?  "0".."9"                       )*
+          |   "0"             ("_"?  "0"                            )* /(?![1-9])/
+HEX_NUMBER.2: "0" ("x" | "X") ("_"? ("0".."9" | "a".."f" | "A".."F"))+
+OCT_NUMBER.2: "0" ("o" | "O") ("_"?  "0".."7"                       )+
+BIN_NUMBER.2: "0" ("b" | "B") ("_"?  "0".."1"                       )+
+
+_EXP: ("e"|"E") ["+" | "-"] _SPECIAL_DEC
+DECIMAL: "." _SPECIAL_DEC | _SPECIAL_DEC "." _SPECIAL_DEC?
+FLOAT_NUMBER.2: _SPECIAL_DEC _EXP | DECIMAL _EXP?
